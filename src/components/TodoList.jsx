@@ -21,27 +21,23 @@ export default function TodoList() {
   });
 
   const mutation = useMutation({
-    mutationFn: async (id, currentLiked) => {
-      await todoApi.patch(`/todos/${id}`, {
+    mutationFn: async ({ id, currentLiked }) => {
+      const response = await todoApi.patch(`/todos/${id}`, {
         liked: !currentLiked,
       });
+      return response.data; 
     },
-    onMutate: async (id, currentLiked) => {
+    onMutate: async ({ id, currentLiked }) => {
+      const previousTodos = queryClient.getQueryData(["todos"]);
       queryClient.setQueryData(["todos"], (prev) =>
         prev.map((todo) =>
-          todo.id === id ? { ...todo, liked: !todo.liked } : todo
+          todo.id === id ? { ...todo, liked: !currentLiked } : todo
         )
       );
-      return { id, currentLiked };
+      return { id, currentLiked, previousTodos };
     },
-    onError: (err, variables, context) => {
-      queryClient.setQueryData(["todos"], (prev) => {
-        const previousTodos = context.previousTodos;
-        if (previousTodos) {
-          return previousTodos;
-        }
-        return prev;
-      });
+    onError: (err, { id, currentLiked }, context) => {
+      queryClient.setQueryData(["todos"], context.previousTodos);
     },
     onSettled: () => {
       refetch();
@@ -49,7 +45,7 @@ export default function TodoList() {
   });
 
   const handleLike = (id, currentLiked) => {
-    mutation.mutate(id, currentLiked);
+    mutation.mutate({ id, currentLiked });
   };
 
   if (isPending) {
