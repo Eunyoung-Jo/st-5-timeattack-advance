@@ -1,10 +1,12 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { FaHeart, FaRegHeart } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { todoApi } from "../api/todos";
 
 export default function TodoList() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const {
     data: todos,
     error,
@@ -18,25 +20,36 @@ export default function TodoList() {
     },
   });
 
-  // TODO: 아래 handleLike 로 구현되어 있는 부분을 useMutation 으로 리팩터링 해보세요. 모든 기능은 동일하게 동작해야 합니다.
-  const queryClient = useQueryClient();
-  const handleLike = async (id, currentLiked) => {
-    const previousTodos = [...todos];
-    try {
-      queryClient.setQueryData(["todos"], (prev) =>
-        prev.map((todo) =>
-          todo.id === id ? { ...todo, liked: !todo.liked } : todo,
-        ),
-      );
+  const mutation = useMutation({
+    mutationFn: async (id, currentLiked) => {
       await todoApi.patch(`/todos/${id}`, {
         liked: !currentLiked,
       });
-    } catch (err) {
-      console.error(err);
-      queryClient.setQueryData(["todos"], previousTodos);
-    } finally {
+    },
+    onMutate: async (id, currentLiked) => {
+      queryClient.setQueryData(["todos"], (prev) =>
+        prev.map((todo) =>
+          todo.id === id ? { ...todo, liked: !todo.liked } : todo
+        )
+      );
+      return { id, currentLiked };
+    },
+    onError: (err, variables, context) => {
+      queryClient.setQueryData(["todos"], (prev) => {
+        const previousTodos = context.previousTodos;
+        if (previousTodos) {
+          return previousTodos;
+        }
+        return prev;
+      });
+    },
+    onSettled: () => {
       refetch();
-    }
+    },
+  });
+
+  const handleLike = (id, currentLiked) => {
+    mutation.mutate(id, currentLiked);
   };
 
   if (isPending) {
